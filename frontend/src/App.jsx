@@ -5,7 +5,8 @@ import SignUpPage from "./pages/SignUpPage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
 import NotificationsPage from "./pages/NotificationsPage.jsx";
 import CallPage from "./pages/CallPage.jsx";
-import ChatPage from "./pages/ChatPage.jsx";
+import ChatPageNew from "./pages/ChatPageNew.jsx";
+import TestPage from "./pages/TestPage.jsx";
 import OnboardingPage from "./pages/OnboardingPage.jsx";
 
 import { Toaster } from "react-hot-toast";
@@ -79,7 +80,7 @@ const App = () => {
           element={
             isAuthenticated && isOnboarded ? (
               <Layout showSidebar={false}>
-                <ChatPage />
+                <ChatPageNew />
               </Layout>
             ) : (
               <Navigate to={!isAuthenticated ? "/login" : "/onboarding"} />
@@ -98,6 +99,17 @@ const App = () => {
               )
             ) : (
               <Navigate to="/login" />
+            )
+          }
+        />
+
+        <Route
+          path="/test"
+          element={
+            isAuthenticated && isOnboarded ? (
+              <TestPage />
+            ) : (
+              <Navigate to={!isAuthenticated ? "/login" : "/onboarding"} />
             )
           }
         />
