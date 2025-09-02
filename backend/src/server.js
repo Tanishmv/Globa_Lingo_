@@ -15,14 +15,31 @@ import Message from "./models/Message.js";
 
 const app = express();
 const server = createServer(app);
-const PORT = process.env.PORT;
+const PORT = process.env.PORT || 5001;
 
 const __dirname = path.resolve();
 
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://globalingo-e2yi.onrender.com",
+  /^https:\/\/.*\.onrender\.com$/
+];
+
 app.use(
   cors({
-    origin: "http://localhost:5173",
-    credentials: true, // allow frontend to send cookies
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
+      
+      if (allowedOrigins.some(allowed => {
+        if (typeof allowed === 'string') return allowed === origin;
+        return allowed.test(origin);
+      })) {
+        return callback(null, true);
+      }
+      
+      callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true,
   })
 );
 
@@ -46,7 +63,18 @@ if (process.env.NODE_ENV === "production") {
 // Socket.io setup with error handling
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:5173",
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
+      
+      if (allowedOrigins.some(allowed => {
+        if (typeof allowed === 'string') return allowed === origin;
+        return allowed.test(origin);
+      })) {
+        return callback(null, true);
+      }
+      
+      callback(new Error('Not allowed by CORS'));
+    },
     credentials: true,
   },
 });
