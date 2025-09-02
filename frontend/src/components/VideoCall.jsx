@@ -187,7 +187,12 @@ const VideoCall = () => {
 
     initializeMedia();
 
-    const socket = io('http://localhost:5001');
+    const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 
+      (import.meta.env.PROD 
+        ? "https://globalingo-e2yi.onrender.com" 
+        : "http://localhost:5001");
+    
+    const socket = io(SOCKET_URL);
     socketRef.current = socket;
 
     socket.on("me", (id) => {
