@@ -4,7 +4,7 @@ import HomePage from "./pages/HomePage.jsx";
 import SignUpPage from "./pages/SignUpPage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
 import NotificationsPage from "./pages/NotificationsPage.jsx";
-import CallPage from "./pages/CallPage.jsx";
+import VideoCall from "./components/VideoCall.jsx";
 import ChatPageNew from "./pages/ChatPageNew.jsx";
 import TestPage from "./pages/TestPage.jsx";
 import OnboardingPage from "./pages/OnboardingPage.jsx";
@@ -65,10 +65,10 @@ const App = () => {
           }
         />
         <Route
-          path="/call/:id"
+          path="/call/:meetingId"
           element={
             isAuthenticated && isOnboarded ? (
-              <CallPage />
+              <VideoCall />
             ) : (
               <Navigate to={!isAuthenticated ? "/login" : "/onboarding"} />
             )

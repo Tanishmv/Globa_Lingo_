@@ -3,7 +3,7 @@ import { useParams } from "react-router";
 import useAuthUser from "../hooks/useAuthUser";
 import socketService from "../lib/socket";
 import toast from "react-hot-toast";
-import CallButtonNew from "../components/CallButtonNew";
+import CallButton from "../components/CallButton";
 
 const ChatPageNew = () => {
   const { id: targetUserId } = useParams();
@@ -35,8 +35,23 @@ const ChatPageNew = () => {
   const [translationData, setTranslationData] = useState(null);
   const [translationHistory, setTranslationHistory] = useState({});
   const [translationCache, setTranslationCache] = useState(new Map());
+  const [targetUser, setTargetUser] = useState(null); // Store target user info
   
   const messagesEndRef = useRef(null);
+
+  // Map language names to codes (same as VideoCall)
+  const mapLanguageToCode = (language) => {
+    const mapping = {
+      'english': 'en-US',
+      'spanish': 'es-ES', 
+      'french': 'fr-FR',
+      'german': 'de-DE',
+      'italian': 'it-IT',
+      'portuguese': 'pt-BR',
+      'chinese': 'zh-CN'
+    };
+    return mapping[language?.toLowerCase()] || language || 'en-US';
+  };
 
   // Language options
   const languages = [
@@ -264,6 +279,46 @@ const ChatPageNew = () => {
           : msg
       ));
     });
+
+    // Video call invitations are now handled as regular chat messages with clickable links
+  };
+
+  const setupAutoLanguages = async () => {
+    if (!authUser || !targetUserId) return;
+
+    try {
+      // Set my target language from my profile
+      if (authUser.nativeLanguage) {
+        const myLanguage = mapLanguageToCode(authUser.nativeLanguage);
+        setToLanguage(myLanguage);
+        console.log(`🎯 My language: ${authUser.nativeLanguage} (${myLanguage})`);
+      }
+
+      // Fetch target user info to get their language
+      const response = await fetch(`/api/users/${targetUserId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        const targetUserData = await response.json();
+        setTargetUser(targetUserData);
+        
+        if (targetUserData.nativeLanguage) {
+          const theirLanguage = mapLanguageToCode(targetUserData.nativeLanguage);
+          setFromLanguage(theirLanguage);
+          console.log(`🎯 Their language: ${targetUserData.nativeLanguage} (${theirLanguage})`);
+          console.log(`🌐 Auto-translation setup: ${theirLanguage} → ${toLanguage}`);
+        }
+      } else {
+        console.log('Could not fetch target user info for auto-translation');
+      }
+    } catch (error) {
+      console.error('Error setting up auto-translation:', error);
+    }
   };
 
   const loadChatHistory = () => {
@@ -329,28 +384,38 @@ const ChatPageNew = () => {
     }
   };
 
-  const handleVideoCall = () => {
+  const handleVideoCall = async () => {
     if (!isConnected) {
       toast.error("Not connected to server");
       return;
     }
 
-    // Use the same format as your original GitHub implementation
-    // The original CallPage expects the targetUserId as the call ID
-    const callUrl = `/call/${targetUserId}`;
-    
-    // Send call notification message first
-    socketService.sendMessage(
-      targetUserId,
-      `📞 I've started a video call. Join me here: ${window.location.origin}${callUrl}`,
-      authUser._id
-    );
-    
-    // Then open the call page
-    window.open(callUrl, '_blank');
-    
-    toast.success("Video call link sent successfully!");
+    try {
+      // Create a unique meeting ID for this conversation
+      const meetingId = [authUser._id, targetUserId].sort().join('-');
+      
+      console.log("🚀 Sending video call invitation:", { meetingId, targetUserId, callerName: authUser.fullName });
+      
+      // Send video call invitation as a regular message with clickable link
+      const callUrl = `${window.location.origin}/call/${meetingId}`;
+      const success = socketService.emit("chat:message", {
+        targetUserId,
+        message: `📹 ${authUser.fullName} is inviting you to a video call: ${callUrl}`,
+        senderId: authUser._id
+      });
+
+      if (success !== false) {
+        toast.success("Video call invitation sent!");
+      } else {
+        toast.error("Failed to send invitation - not connected");
+      }
+    } catch (error) {
+      console.error("Error sending video call invitation:", error);
+      toast.error("Failed to send video call invitation");
+    }
   };
+
+
 
   // Translation functions
   const toggleTranslateMode = () => {
@@ -580,6 +645,30 @@ const ChatPageNew = () => {
     });
   };
 
+  // Function to render text with clickable links
+  const renderMessageWithLinks = (text) => {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts = text.split(urlRegex);
+    
+    return parts.map((part, index) => {
+      if (part.match(urlRegex)) {
+        return (
+          <a
+            key={index}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline text-blue-200 hover:text-blue-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {part.includes('/call/') ? ' Join Video Call' : part}
+          </a>
+        );
+      }
+      return part;
+    });
+  };
+
   // Connection status indicator
   const ConnectionStatus = () => (
     <div className={`fixed top-4 right-4 px-3 py-1 rounded-full text-sm font-medium z-50 ${
@@ -610,10 +699,11 @@ const ChatPageNew = () => {
         {/* Main Chat Area */}
         <div className={`${isTranslateMode && translationData ? 'w-3/4' : 'w-full'} transition-all duration-300 relative`}>
           {/* Video Call Button */}
-          <CallButtonNew handleVideoCall={handleVideoCall} />
+          <CallButton handleVideoCall={handleVideoCall} />
+
           
           {/* Translation Button */}
-          <div className="absolute top-2 right-20 z-10">
+          <div className="absolute top-6 right-20 z-10">
             <div className="relative translation-dropdown">
               <button
                 onClick={toggleTranslateMode}
@@ -948,16 +1038,21 @@ const ChatPageNew = () => {
                         </div>
                       </div>
                     ) : (
-                      // Normal message display
+                      // Normal message display or call invitation
                       <div>
-                        <p className={`text-sm ${message.isDeleted ? 'italic text-gray-500' : ''}`}>
-                          {message.text}
-                        </p>
-                        {message.isEdited && !message.isDeleted && (
-                          <p className="text-xs text-gray-400 mt-1">
-                            (edited)
-                          </p>
-                        )}
+                        {
+                          // Regular message
+                          <div>
+                            <p className={`text-sm ${message.isDeleted ? 'italic text-gray-500' : ''}`}>
+                              {message.isDeleted ? message.text : renderMessageWithLinks(message.text)}
+                            </p>
+                            {message.isEdited && !message.isDeleted && (
+                              <p className="text-xs text-gray-400 mt-1">
+                                (edited)
+                              </p>
+                            )}
+                          </div>
+                        }
                       </div>
                     )}
 

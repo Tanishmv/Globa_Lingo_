@@ -364,71 +364,124 @@ io.on("connection", (socket) => {
     }
   });
 
-  // WebRTC signaling
-  socket.on("webrtc:offer", (data) => {
+  // ============================================
+  // WEBRTC VIDEO CALL SIGNALING (GitHub Working Implementation)
+  // ============================================
+  
+  // Send socket ID to client (required for working implementation)
+  socket.emit("me", socket.id);
+
+  // Video call invitation (keep for chat integration)
+  socket.on("videoCallInvitation", ({ targetUserId, callerName, meetingId, callUrl }) => {
     try {
-      const { targetUserId, offer, callId } = data;
+      console.log("📹 Video call invitation:", { targetUserId, callerName, meetingId });
       
-      // Find target user's socket
       const targetSocket = Array.from(activeUsers.entries()).find(
         ([_, user]) => user._id.toString() === targetUserId.toString()
       );
 
       if (targetSocket) {
         const [targetSocketId] = targetSocket;
-        io.to(targetSocketId).emit("webrtc:offer", {
-          offer,
-          callId,
-          fromUserId: activeUsers.get(socket.id)?._id,
-          fromSocketId: socket.id,
+        io.to(targetSocketId).emit("videoCallInvitation", {
+          callerName,
+          meetingId,
+          callUrl
         });
+        console.log(`✅ Video call invitation sent to ${targetSocket[1].fullName}`);
+      } else {
+        console.log("❌ Target user not found");
       }
     } catch (error) {
-      console.error("Error in webrtc:offer:", error);
-      socket.emit("error", { message: "Failed to send call offer" });
+      console.error("Error in videoCallInvitation:", error);
     }
   });
 
-  socket.on("webrtc:answer", (data) => {
+  // Handle simple room joining for video calls
+  socket.on("joinVideoCallRoom", ({ meetingId, socketId, userName, userId, nativeLanguage }) => {
     try {
-      const { targetSocketId, answer, callId } = data;
+      console.log("🏠 Joining video call room:", { meetingId, socketId, userName });
       
-      io.to(targetSocketId).emit("webrtc:answer", {
-        answer,
-        callId,
-        fromSocketId: socket.id,
-      });
+      // Join the room
+      socket.join(meetingId);
+      
+      // Get room size
+      const roomSockets = io.sockets.adapter.rooms.get(meetingId);
+      const roomSize = roomSockets ? roomSockets.size : 0;
+      
+      console.log("📊 Room", meetingId, "now has", roomSize, "people");
+      
+      if (roomSize === 1) {
+        // First person - wait for other
+        socket.videoUserName = userName;
+        socket.videoNativeLanguage = nativeLanguage;
+        socket.emit("roomRole", { 
+          role: "waiter", 
+          message: "Waiting for other participant..." 
+        });
+      } else if (roomSize === 2) {
+        // Second person - you should call the first person
+        const firstPersonSocket = Array.from(roomSockets).find(id => id !== socket.id);
+        const firstSocket = io.sockets.sockets.get(firstPersonSocket);
+        
+        // Store names and languages on sockets for reference
+        socket.videoUserName = userName;
+        socket.videoNativeLanguage = nativeLanguage;
+        
+        if (firstSocket) {
+          // Tell second person to call first person (with first person's info)
+          socket.emit("roomRole", { 
+            role: "caller", 
+            otherSocketId: firstPersonSocket,
+            otherUserName: firstSocket.videoUserName || "Other participant",
+            otherUserLanguage: firstSocket.videoNativeLanguage || 'en-US',
+            message: "Ready to start call" 
+          });
+          
+          // Tell first person who will call them (with second person's info)
+          firstSocket.emit("expectingCallFrom", { 
+            socketId: socket.id, 
+            userName: userName,
+            userLanguage: nativeLanguage || 'en-US'
+          });
+        }
+      }
+      
     } catch (error) {
-      console.error("Error in webrtc:answer:", error);
-      socket.emit("error", { message: "Failed to send call answer" });
+      console.error("Error in joinVideoCallRoom:", error);
     }
   });
 
-  socket.on("webrtc:ice-candidate", (data) => {
+  // Handle call user (exact match to GitHub implementation)
+  socket.on("callUser", (data) => {
     try {
-      const { targetSocketId, candidate, callId } = data;
-      
-      io.to(targetSocketId).emit("webrtc:ice-candidate", {
-        candidate,
-        callId,
-        fromSocketId: socket.id,
+      console.log("📞 CallUser:", data);
+      io.to(data.userToCall).emit("callUser", {
+        signal: data.signalData,
+        from: data.from,
+        name: data.name
       });
     } catch (error) {
-      console.error("Error in webrtc:ice-candidate:", error);
+      console.error("Error in callUser:", error);
     }
   });
 
-  // Call management
-  socket.on("call:end", (data) => {
+  // Handle answer call (exact match to GitHub implementation)
+  socket.on("answerCall", (data) => {
     try {
-      const { targetSocketId, callId } = data;
-      
-      io.to(targetSocketId).emit("call:ended", {
-        callId,
-        endedBy: socket.id,
-      });
+      console.log("✅ AnswerCall:", data);
+      io.to(data.to).emit("callAccepted", data.signal);
     } catch (error) {
-      console.error("Error in call:end:", error);
+      console.error("Error in answerCall:", error);
+    }
+  });
+
+  // Handle call ended (exact match to GitHub implementation)
+  socket.on("callEnded", () => {
+    try {
+      console.log("📞 CallEnded from:", socket.id);
+      socket.broadcast.emit("callEnded");
+    } catch (error) {
+      console.error("Error in callEnded:", error);
     }
   });
 
@@ -446,6 +499,18 @@ io.on("connection", (socket) => {
         });
         
         activeUsers.delete(socket.id);
+      }
+
+      // Handle video call room disconnection
+      if (socket.roomId) {
+        console.log(`📹 User ${socket.userName} left room ${socket.roomId}`);
+        
+        // Notify others in the room
+        socket.to(socket.roomId).emit("user-left", {
+          socketId: socket.id,
+          userName: socket.userName,
+          userId: socket.userId
+        });
       }
     } catch (error) {
       console.error("Error in disconnect:", error);

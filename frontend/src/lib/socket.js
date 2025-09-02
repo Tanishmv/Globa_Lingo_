@@ -169,6 +169,7 @@ class SocketService {
 
   // WebRTC signaling methods
   sendOffer(targetUserId, offer, callId) {
+    console.log("Sending WebRTC offer:", { targetUserId, callId });
     return this.emit("webrtc:offer", {
       targetUserId,
       offer,
