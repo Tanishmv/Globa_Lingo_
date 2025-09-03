@@ -96,6 +96,10 @@ const VideoCall = () => {
         setStream(stream);
         if (myVideo.current) {
           myVideo.current.srcObject = stream;
+          // Force play the local video
+          myVideo.current.onloadedmetadata = () => {
+            myVideo.current.play().catch(e => console.error("Error playing local video:", e));
+          };
         }
       } catch (error) {
         console.warn("❌ Full media access failed:", error);
@@ -109,6 +113,10 @@ const VideoCall = () => {
           setIsAudioOn(false);
           if (myVideo.current) {
             myVideo.current.srcObject = videoStream;
+            // Force play the local video
+            myVideo.current.onloadedmetadata = () => {
+              myVideo.current.play().catch(e => console.error("Error playing local video:", e));
+            };
           }
           toast.warning("Microphone unavailable - video only mode");
         } catch (videoError) {
@@ -168,6 +176,10 @@ const VideoCall = () => {
               
               if (myVideo.current) {
                 myVideo.current.srcObject = fakeStream;
+                // Force play the fake stream
+                myVideo.current.onloadedmetadata = () => {
+                  myVideo.current.play().catch(e => console.error("Error playing fake video:", e));
+                };
               }
               
               console.log("✅ Test stream created");
