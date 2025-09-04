@@ -94,13 +94,25 @@ const VideoCall = () => {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         console.log("✅ Got full media access");
         setStream(stream);
-        if (myVideo.current) {
-          myVideo.current.srcObject = stream;
-          // Force play the local video
-          myVideo.current.onloadedmetadata = () => {
-            myVideo.current.play().catch(e => console.error("Error playing local video:", e));
-          };
-        }
+        
+        // Retry mechanism for video element assignment
+        const assignStreamToVideo = (retries = 5) => {
+          if (myVideo.current) {
+            console.log("✅ Assigning stream to video element");
+            myVideo.current.srcObject = stream;
+            // Force play the local video
+            myVideo.current.onloadedmetadata = () => {
+              myVideo.current.play().catch(e => console.error("Error playing local video:", e));
+            };
+          } else if (retries > 0) {
+            console.log(`⏳ Video element not ready, retrying... (${retries} attempts left)`);
+            setTimeout(() => assignStreamToVideo(retries - 1), 100);
+          } else {
+            console.error("❌ Failed to assign stream: video element never became available");
+          }
+        };
+        
+        assignStreamToVideo();
       } catch (error) {
         console.warn("❌ Full media access failed:", error);
         
@@ -111,13 +123,20 @@ const VideoCall = () => {
           console.log("✅ Got video-only access");
           setStream(videoStream);
           setIsAudioOn(false);
-          if (myVideo.current) {
-            myVideo.current.srcObject = videoStream;
-            // Force play the local video
-            myVideo.current.onloadedmetadata = () => {
-              myVideo.current.play().catch(e => console.error("Error playing local video:", e));
-            };
-          }
+          
+          // Retry mechanism for video-only stream
+          const assignVideoOnlyStream = (retries = 5) => {
+            if (myVideo.current) {
+              myVideo.current.srcObject = videoStream;
+              myVideo.current.onloadedmetadata = () => {
+                myVideo.current.play().catch(e => console.error("Error playing local video:", e));
+              };
+            } else if (retries > 0) {
+              setTimeout(() => assignVideoOnlyStream(retries - 1), 100);
+            }
+          };
+          
+          assignVideoOnlyStream();
           toast.warning("Microphone unavailable - video only mode");
         } catch (videoError) {
           console.warn("❌ Video-only failed:", videoError);
@@ -174,13 +193,19 @@ const VideoCall = () => {
               setIsVideoOn(true);
               setIsAudioOn(false);
               
-              if (myVideo.current) {
-                myVideo.current.srcObject = fakeStream;
-                // Force play the fake stream
-                myVideo.current.onloadedmetadata = () => {
-                  myVideo.current.play().catch(e => console.error("Error playing fake video:", e));
-                };
-              }
+              // Retry mechanism for fake stream
+              const assignFakeStream = (retries = 5) => {
+                if (myVideo.current) {
+                  myVideo.current.srcObject = fakeStream;
+                  myVideo.current.onloadedmetadata = () => {
+                    myVideo.current.play().catch(e => console.error("Error playing fake video:", e));
+                  };
+                } else if (retries > 0) {
+                  setTimeout(() => assignFakeStream(retries - 1), 100);
+                }
+              };
+              
+              assignFakeStream();
               
               console.log("✅ Test stream created");
               toast("Using test mode - perfect for multi-tab testing!", {
